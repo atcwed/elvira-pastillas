@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>💊 Inventario de Pastillas</title>
+  <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-database.js"></script>
+  <style>
+    body {
+      font-family: "Segoe UI", sans-serif;
+      background: linear-gradient(180deg, #e0f2fe, #fef9c3);
+      margin: 0;
+      padding: 20px;
+      color: #1e293b;
+    }
+    h1 {
+      text-align: center;
+      color: #0f172a;
+      background: linear-gradient(90deg, #2563eb, #16a34a, #eab308);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      font-size: 2em;
+    }
+    .card {
+      background: white;
+      border-radius: 12px;
+      padding: 15px;
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+      margin: 10px 0;
+      transition: transform 0.2s;
+    }
+    .card:hover {
+      transform: scale(1.02);
+    }
+    input, button {
+      padding: 10px;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+      margin: 5px;
+      font-size: 1em;
+    }
+    button {
+      background: linear-gradient(90deg, #2563eb, #16a34a);
+      color: white;
+      border: none;
+      cursor: pointer;
+      font-weight: bold;
+    }
+    button:hover {
+      background: linear-gradient(90deg, #1d4ed8, #15803d);
+    }
+    .low {
+      background: #fee2e2;
+    }
+    .ok {
+      background: #dcfce7;
+    }
+    .header {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+    #lista, #historial {
+      margin-top: 20px;
+    }
+    h2 {
+      color: #0f172a;
+      border-left: 6px solid #2563eb;
+      padding-left: 10px;
+    }
+  </style>
+</head>
+<body>
+  <h1>💊 Inventario Familiar de Pastillas</h1>
+
+  <div class="header">
+    <input id="nombre" placeholder="Nombre de pastilla">
+    <input id="cantidad" type="number" placeholder="Cantidad">
+    <input id="hora" type="time">
+    <input id="responsable" placeholder="Responsable">
+    <button onclick="agregarPastilla()">➕ Agregar</button>
+  </div>
+
+  <h2>Inventario</h2>
+  <div id="lista"></div>
+
+  <h2>Historial de Toma</h2>
+  <div id="historial"></div>
+
+  <script>
+    // 🔥 Tu configuración de Firebase
+    const firebaseConfig = {
+      apiKey: "AIzaSyAIL_YNhxBzn16bRW8VRvw7vBP812lN8pM",
+      authDomain: "inventarioabuela-db48f.firebaseapp.com",
+      databaseURL: "https://inventarioabuela-db48f-default-rtdb.firebaseio.com",
+      projectId: "inventarioabuela-db48f",
+      storageBucket: "inventarioabuela-db48f.firebasestorage.app",
+      messagingSenderId: "59938878894",
+      appId: "1:59938878894:web:a31b673d2ed9b5b759043f",
+      measurementId: "G-PVFKXM4CKM"
+    };
+
+    const app = firebase.initializeApp(firebaseConfig);
+    const db = firebase.database(app);
+
+    const listaDiv = document.getElementById("lista");
+    const historialDiv = document.getElementById("historial");
+
+    // Datos locales
+    let datosLocales = JSON.parse(localStorage.getItem("pastillas")) || {};
+    let historialLocal = JSON.parse(localStorage.getItem("historial")) || {};
+
+    mostrarDesdeLocal();
+
+    // 🧠 Guardar localmente
+    function guardarLocal() {
+      localStorage.setItem("pastillas", JSON.stringify(datosLocales));
+      localStorage.setItem("historial", JSON.stringify(historialLocal));
+    }
+
+    // 🩺 Agregar nueva pastilla
+    function agregarPastilla() {
+      const nombre = document.getElementById("nombre").value.trim();
+      const cantidad = parseInt(document.getElementById("cantidad").value);
+      const hora = document.getElementById("hora").value;
+      const responsable = document.getElementById("responsable").value.trim();
+
+      if (!nombre || !cantidad || !responsable) {
+        alert("Por favor completa todos los campos");
+        return;
+      }
+
+      const refNueva = db.ref("pastillas").push();
+      const obj = { nombre, cantidad, hora, responsable };
+      refNueva.set(obj);
+
+      datosLocales[refNueva.key] = obj;
+      guardarLocal();
+      limpiarCampos();
+    }
+
+    function limpiarCampos() {
+      document.getElementById("nombre").value = "";
+      document.getElementById("cantidad").value = "";
+      document.getElementById("hora").value = "";
+      document.getElementById("responsable").value = "";
+    }
+
+    // 📦 Mostrar inventario
+    function mostrarPastillas() {
+      db.ref("pastillas").on("value", (snapshot) => {
+        listaDiv.innerHTML = "";
+        datosLocales = {};
+        snapshot.forEach((child) => {
+          const data = child.val();
+          const id = child.key;
+          datosLocales[id] = data;
+          const color = data.cantidad <= 3 ? "low" : "ok";
+          const card = document.createElement("div");
+          card.className = `card ${color}`;
+          card.innerHTML = `
+            <strong>${data.nombre}</strong><br>
+            Cantidad restante: ${data.cantidad}<br>
+            Hora: ${data.hora || "—"}<br>
+            Responsable: ${data.responsable}<br>
+            <button onclick="tomarPastilla('${id}', '${data.nombre}', '${data.responsable}', ${data.cantidad})">💊 Tomar 1</button>
+            <button onclick="eliminar('${id}')">🗑️ Eliminar</button>
+          `;
+          listaDiv.appendChild(card);
+        });
+        guardarLocal();
+      });
+    }
+
+    // 💊 Tomar una pastilla
+    function tomarPastilla(id, nombre, responsable, cantidad) {
+      if (cantidad > 0) {
+        db.ref("pastillas/" + id + "/cantidad").set(cantidad - 1);
+        const fecha = new Date().toLocaleString("es-CO");
+        const registro = { nombre, responsable, fecha, accion: "Tomó una pastilla" };
+        db.ref("historial").push(registro);
+
+        historialLocal[Date.now()] = registro;
+        guardarLocal();
+      } else {
+        alert("⚠️ Ya no quedan pastillas de " + nombre);
+      }
+    }
+
+    // 🗑️ Eliminar pastilla
+    function eliminar(id) {
+      db.ref("pastillas/" + id).remove();
+      delete datosLocales[id];
+      guardarLocal();
+    }
+
+    // 🕒 Historial
+    function mostrarHistorial() {
+      db.ref("historial").on("value", (snapshot) => {
+        historialDiv.innerHTML = "";
+        historialLocal = {};
+        snapshot.forEach((child) => {
+          const h = child.val();
+          historialLocal[child.key] = h;
+          const item = document.createElement("div");
+          item.textContent = `🕓 ${h.fecha}: ${h.responsable} → ${h.accion} (${h.nombre})`;
+          historialDiv.appendChild(item);
+        });
+        guardarLocal();
+      });
+    }
+
+    // 📱 Mostrar sin internet
+    function mostrarDesdeLocal() {
+      listaDiv.innerHTML = "";
+      Object.entries(datosLocales).forEach(([id, data]) => {
+        const color = data.cantidad <= 3 ? "low" : "ok";
+        const card = document.createElement("div");
+        card.className = `card ${color}`;
+        card.innerHTML = `
+          <strong>${data.nombre}</strong><br>
+          Cantidad: ${data.cantidad}<br>
+          Hora: ${data.hora || "—"}<br>
+          Responsable: ${data.responsable}<br>
+        `;
+        listaDiv.appendChild(card);
+      });
+
+      historialDiv.innerHTML = "";
+      Object.values(historialLocal).forEach((h) => {
+        const item = document.createElement("div");
+        item.textContent = `🕓 ${h.fecha}: ${h.responsable} → ${h.accion} (${h.nombre})`;
+        historialDiv.appendChild(item);
+      });
+    }
+
+    // 🚀 Iniciar
+    mostrarPastillas();
+    mostrarHistorial();
+  </script>
+</body>
+</html>
